@@ -1,7 +1,9 @@
 ---
 title: "lab6"
-output: html_document
+output: pdf_document
 ---
+
+GITHUB: https://github.com/theeho/lab6
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -15,7 +17,8 @@ library(leaps)
 library(rms)
 library(Sleuth3) #case1201 data
 ```
-
+Exercise 1/2: 
+Note: Was not sure how to use coef function so I used tidy function. I think it works.
 ```{r}
 sat_scores <- Sleuth3::case1201 
 full_model <- lm(SAT ~ Takers + Income + Years + Public + Expend + Rank , data = sat_scores)
@@ -34,29 +37,43 @@ adjr_coef <- tidy(model_select) %>% pull(adj.r.squared)
 BIC_coef
 adjr_coef
 ```
+Exercise 3: 
 ```{r}
 model_select_aic <- step(full_model, direction = "backward")
 tidy(model_select_aic)
 ```
+Exercise 4:
+The models do not have the same number of predictors. The AIC has the least number of predictors at 4 while BIC and adjr2 have 6 predictors. This is expected because AIC has a greater penalty for more predictors compared to BIC and adjr2. 
+Exercise 5:
 
 ```{r}
 sat_aug <- augment(model_select_aic) %>%
-      mutate(obs_num = row_number()) #add observation number for plots
-glimpse(sat_aug)
+      mutate(obs_num = row_number()) 
+head(sat_aug, n=5)
 ```
+Exercise 6: 
+Based on lecture notes, we should use 2(p+1)/n as our leverage threshold. 
+
+Exercise 7:
 ```{r}
-(leverage_threshold <- 2*(7+1)/nrow(sat_aug))
+(leverage_threshold <- 2*(4+1)/nrow(sat_aug))
 ggplot(data = sat_aug, aes(x = obs_num, y = .hat)) + 
   geom_point() + 
   geom_hline(yintercept = leverage_threshold, color = "red")+
-  labs(x = "Observation Number",y = "Leverage",title = "Leverage") +
-  geom_text(aes(label=ifelse(.hat > leverage_threshold, as.character(obs_num), "")), nudge_x = 4)
+  labs(x = "Observation Number",y = "Leverage",title = "Leverage per Observation") +
+  geom_text(aes(label=ifelse(.hat > leverage_threshold, as.character(obs_num), "")), nudge_x = 2)
 ```
+
+
+Exercise 8:
 ```{r}
 obnum_s <- sat_scores %>% mutate(obs_num = row_number())
 high_lev <- filter(obnum_s, obs_num == 22 | obs_num == 29)
 head(high_lev, n = 2)
 ```
+It appears that Alaska and Louisiana are the two high leverage points. 
+
+Exercise 9:
 ```{r}
 ggplot(data = sat_aug, aes(x = .fitted,y = .std.resid)) +
   geom_point() + 
@@ -65,10 +82,14 @@ ggplot(data = sat_aug, aes(x = .fitted,y = .std.resid)) +
   labs(x ="Predicted Value",y ="Standardized Residuals",title = "Standardized Residuals vs. Predicted") +
   geom_text(aes(label = ifelse(abs(.std.resid) > 2,as.character(obs_num),"")), nudge_x = 5)
 ```
+Exercise 10:
 ```{r}
 high_res <- filter(obnum_s, obs_num == 16 | obs_num == 29 | obs_num == 50)
 head(high_res, n = 3)
 ```
+It appears that Mississippi, Alaska, and South Carolina have large standardized residuals. 
+
+Exercise 11: 
 ```{r}
 ggplot(data = sat_aug, aes(x = obs_num, y = .cooksd)) + 
   geom_point() + 
@@ -76,11 +97,18 @@ ggplot(data = sat_aug, aes(x = obs_num, y = .cooksd)) +
   labs(x= "Observation Number",y = "Cook's Distance",title = "Cook's Distance") +
   geom_text(aes(label = ifelse(.cooksd > 1,as.character(obs_num),"")), nudge_x =1.5)
 ```
+It appears Alaska has a high cooks distance and is therefore considered an influential point. I think the best practice would be to check the model with and without this point, and also determine if the outlier is due to the predictor variables or response variables. 
+
+Exercise 12
 ```{r}
-sat_model <- lm(Expend ~ .fitted + .resid + .hat+.sigma +.cooksd + .std.resid  , data = sat_aug)
-summary(sat_model)
-```
-```{r}
-tidy(vif(sat_model))
+sat_modelr <- lm(Expend ~  Rank + Years+Public ,data = sat_aug)
+summary(sat_modelr)
+tidy(vif(sat_modelr))
 ```
 
+
+Because the VIF valuesfor each paramater are small, Expend does not appear to be correlated. 
+```{r}
+tidy(vif(model_select_aic))
+```
+In this model the VIC values for all the paramaters are also small. None of the parameters appear to be correlated. 
