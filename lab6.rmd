@@ -7,22 +7,80 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+library(tidyverse)
+library(knitr)
+library(broom)
+library(leaps)
+library(rms)
+library(Sleuth3) #case1201 data
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+sat_scores <- Sleuth3::case1201 
+full_model <- lm(SAT ~ Takers + Income + Years + Public + Expend + Rank , data = sat_scores)
+tidy(full_model)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+model_select <- regsubsets(SAT ~ Takers + Income + Years + Public + Expend + 
+                             Rank , data = sat_scores, method = "backward")
+select_summary <- summary(model_select)
+
+
+coef(model_select, 6) #display coefficients 
+BIC_coef <- tidy(model_select) %>% pull(BIC)
+adjr_coef <- tidy(model_select) %>% pull(adj.r.squared)
+BIC_coef
+adjr_coef
+```
+```{r}
+model_select_aic <- step(full_model, direction = "backward")
+tidy(model_select_aic)
+```
+
+```{r}
+sat_aug <- augment(model_select_aic) %>%
+      mutate(obs_num = row_number()) #add observation number for plots
+glimpse(sat_aug)
+```
+```{r}
+(leverage_threshold <- 2*(7+1)/nrow(sat_aug))
+ggplot(data = sat_aug, aes(x = obs_num, y = .hat)) + 
+  geom_point() + 
+  geom_hline(yintercept = leverage_threshold, color = "red")+
+  labs(x = "Observation Number",y = "Leverage",title = "Leverage") +
+  geom_text(aes(label=ifelse(.hat > leverage_threshold, as.character(obs_num), "")), nudge_x = 4)
+```
+```{r}
+obnum_s <- sat_scores %>% mutate(obs_num = row_number())
+high_lev <- filter(obnum_s, obs_num == 22 | obs_num == 29)
+head(high_lev, n = 2)
+```
+```{r}
+ggplot(data = sat_aug, aes(x = .fitted,y = .std.resid)) +
+  geom_point() + 
+  geom_hline(yintercept = -2,color = "red") +
+  geom_hline(yintercept = 2,color = "red") +
+  labs(x ="Predicted Value",y ="Standardized Residuals",title = "Standardized Residuals vs. Predicted") +
+  geom_text(aes(label = ifelse(abs(.std.resid) > 2,as.character(obs_num),"")), nudge_x = 5)
+```
+```{r}
+high_res <- filter(obnum_s, obs_num == 16 | obs_num == 29 | obs_num == 50)
+head(high_res, n = 3)
+```
+```{r}
+ggplot(data = sat_aug, aes(x = obs_num, y = .cooksd)) + 
+  geom_point() + 
+  geom_hline(yintercept=1,color = "red")+
+  labs(x= "Observation Number",y = "Cook's Distance",title = "Cook's Distance") +
+  geom_text(aes(label = ifelse(.cooksd > 1,as.character(obs_num),"")), nudge_x =1.5)
+```
+```{r}
+sat_model <- lm(Expend ~ .fitted + .resid + .hat+.sigma +.cooksd + .std.resid  , data = sat_aug)
+summary(sat_model)
+```
+```{r}
+tidy(vif(sat_model))
+```
+
